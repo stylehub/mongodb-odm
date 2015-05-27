@@ -124,6 +124,15 @@ class UnitOfWork implements PropertyChangedListener
     private $documentStates = array();
 
     /**
+     * All known embeddedDocuments stored to prevent the reuse of their
+     * object ids by PHP for new objects after garbage collection
+     * Keys are object ids (spl_object_hash).
+     *
+     * @var array
+     */
+    private $embeddedDocumentsKnown = array();
+
+    /**
      * Map of documents that are scheduled for dirty checking at commit time.
      *
      * Documents are grouped by their class name, and then indexed by their SPL
@@ -1023,6 +1032,9 @@ class UnitOfWork implements PropertyChangedListener
             $this->documentIdentifiers[$oid] = $idValue;
         }
 
+        if ($class->isEmbeddedDocument) {
+            $this->embeddedDocumentsKnown[$oid] = $document;
+        }
         $this->documentStates[$oid] = self::STATE_MANAGED;
 
         if ($upsert) {
@@ -1064,6 +1076,9 @@ class UnitOfWork implements PropertyChangedListener
              */
             $oid = spl_object_hash($document);
             $this->documentIdentifiers[$oid] = $id;
+            if ($class->isEmbeddedDocument) {
+                $this->embeddedDocumentsKnown[$oid] = $document;
+            }
             $this->documentStates[$oid] = self::STATE_MANAGED;
             $this->originalDocumentData[$oid][$class->identifier] = $id;
             $this->addToIdentityMap($document);
@@ -2306,7 +2321,7 @@ class UnitOfWork implements PropertyChangedListener
                     $this->documentDeletions[$oid], $this->documentIdentifiers[$oid],
                     $this->documentStates[$oid], $this->originalDocumentData[$oid],
                     $this->parentAssociations[$oid], $this->documentUpserts[$oid],
-                    $this->hasScheduledCollections[$oid]);
+                    $this->hasScheduledCollections[$oid], $this->embeddedDocumentsKnown[$oid]);
                 break;
             case self::STATE_NEW:
             case self::STATE_DETACHED:
@@ -2629,6 +2644,7 @@ class UnitOfWork implements PropertyChangedListener
             $this->originalDocumentData =
             $this->documentChangeSets =
             $this->documentStates =
+            $this->embeddedDocumentsKnown =
             $this->scheduledForDirtyCheck =
             $this->documentInsertions =
             $this->documentUpserts =
@@ -3073,6 +3089,9 @@ class UnitOfWork implements PropertyChangedListener
             $this->documentIdentifiers[$oid] = $class->getPHPIdentifierValue($id);
         }
 
+        if ($class->isEmbeddedDocument) {
+            $this->embeddedDocumentsKnown[$oid] = $document;
+        }
         $this->documentStates[$oid] = self::STATE_MANAGED;
         $this->originalDocumentData[$oid] = $data;
         $this->addToIdentityMap($document);
